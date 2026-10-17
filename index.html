@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DiskMap</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%23ff6363' stroke-width='6' stroke-dasharray='50 32'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23e6e6e6'/%3E%3C/svg%3E">
+<style>
+:root{
+  --canvas:#040506; --card:#07080a; --recess:#111214; --border:#232426; --border-2:#363739;
+  --text:#ffffff; --text-2:#9c9c9d; --muted:#6a6b6c; --accent:#ff6363;
+  --btn:#e6e6e6; --btn-text:#454647;
+  --key: rgba(255,255,255,.05) 0 1px 0 0 inset, rgba(255,255,255,.12) 0 0 0 1px, rgba(0,0,0,.2) 0 -1px 0 0 inset;
+  --sans: Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --mono: "Geist Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--canvas);color:var(--text);font:14px/1.45 var(--sans);overflow:hidden;user-select:none;-webkit-font-smoothing:antialiased}
+#bg{position:fixed;inset:0;z-index:0;pointer-events:none}
+.app{position:relative;z-index:1;display:grid;grid-template-columns:268px 1fr 360px;grid-template-rows:52px 1fr 30px;height:100vh}
+
+/* header */
+header{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--border);background:rgba(4,5,6,.7);backdrop-filter:blur(48px)}
+.logo{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:-.01em;min-width:236px}
+.logo svg{width:20px;height:20px}
+.crumbs{display:flex;align-items:center;gap:2px;min-width:0;flex:1;overflow:hidden;font-size:13px}
+.crumb{padding:4px 8px;border-radius:6px;color:var(--text-2);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.crumb:hover{background:var(--recess);color:var(--text)}
+.crumb.cur{color:var(--text);font-weight:500}
+.sep{color:var(--muted);font-size:12px}
+.btn{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:8px;border:0;background:var(--recess);color:var(--text);font:500 13px var(--sans);cursor:pointer;box-shadow:var(--key);transition:background .15s,transform .1s}
+.btn:hover{background:#1a1b1d}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.primary{background:var(--btn);color:var(--btn-text);box-shadow:none}
+.btn.primary:hover{background:#fff}
+.btn.danger{background:var(--accent);color:#1a0505;box-shadow:none}
+.btn.danger:hover{background:#ff7b7b}
+.btn svg{width:15px;height:15px}
+kbd{font:500 10px var(--mono);color:var(--muted);border:1px solid var(--border-2);border-radius:4px;padding:1px 4px;margin-left:2px}
+
+/* panels */
+aside,.right{background:rgba(7,8,10,.82);backdrop-filter:blur(20px);overflow:auto;min-height:0}
+aside{border-right:1px solid var(--border);padding:16px 12px}
+.right{border-left:1px solid var(--border);display:flex;flex-direction:column}
+.label{font:500 10px/1 var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:4px 6px 10px}
+.drive{padding:12px;border-radius:12px;cursor:pointer;margin-bottom:6px;transition:background .15s;border:1px solid transparent}
+.drive:hover{background:var(--recess)}
+.drive.active{background:var(--recess);border-color:var(--border-2)}
+.drive .top{display:flex;align-items:center;gap:10px}
+.drive .ico{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:#16171a;box-shadow:var(--key);flex:none}
+.drive .ico svg{width:16px;height:16px;color:var(--text-2)}
+.drive .name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drive .sub{font:11px var(--mono);color:var(--muted)}
+.bar{height:4px;border-radius:9px;background:#1b1c1f;overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;border-radius:9px;background:linear-gradient(90deg,#e6e6e6,#9c9c9d)}
+.bar i.hot{background:linear-gradient(90deg,#ff9a6b,var(--accent))}
+.field{display:flex;gap:6px;margin:0 2px}
+.input{flex:1;min-width:0;height:32px;border-radius:8px;border:1px solid var(--border-2);background:var(--recess);color:var(--text);padding:0 10px;font:12px var(--mono);outline:none}
+.input:focus{border-color:#5a5b5d}
+.stats{margin:20px 2px 0;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.stat{background:var(--recess);border-radius:10px;padding:10px;box-shadow:var(--key)}
+.stat b{display:block;font:600 15px var(--sans);letter-spacing:-.01em}
+.stat span{font:10px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.hint{font-size:12px;color:var(--muted);margin:18px 6px 0;line-height:1.6}
+
+/* center */
+main{position:relative;display:grid;place-items:center;min-width:0;min-height:0;overflow:hidden}
+#map{width:min(92%,92vh - 120px);height:auto;aspect-ratio:1;overflow:visible}
+#map .seg{cursor:pointer;stroke:var(--canvas);stroke-width:1;transition:filter .12s, opacity .2s}
+#map .seg:hover{filter:brightness(1.35) saturate(1.1)}
+#map .seg.dim{opacity:.25}
+#rings{transform-origin:center;transform-box:fill-box}
+#rings.enter{animation:enter .45s cubic-bezier(.2,.8,.2,1)}
+@keyframes enter{from{opacity:0;transform:scale(.88) rotate(-8deg)}to{opacity:1;transform:none}}
+.center-c{fill:#0b0c0e;stroke:var(--border-2);cursor:pointer;transition:fill .15s}
+.center-c:hover{fill:#141518}
+.ctitle{font:600 30px var(--sans);fill:#fff;text-anchor:middle;pointer-events:none}
+.csize{font:500 22px var(--mono);fill:var(--text-2);text-anchor:middle;pointer-events:none}
+.chint{font:15px var(--mono);fill:var(--muted);text-anchor:middle;pointer-events:none;text-transform:uppercase;letter-spacing:.08em}
+
+.empty{text-align:center;color:var(--text-2);max-width:420px}
+.empty h2{color:#fff;font-weight:600;letter-spacing:-.02em;font-size:26px;margin:18px 0 8px}
+.empty p{margin:0 0 18px}
+.orb{width:120px;height:120px;margin:0 auto;border-radius:50%;background:conic-gradient(from 0deg,#ff6363,#ffb36b,#e6e6e6,#6bb7ff,#a46bff,#ff6363);mask:radial-gradient(circle,transparent 38%,#000 40%,#000 68%,transparent 70%,transparent 74%,#000 76%);-webkit-mask:radial-gradient(circle,transparent 38%,#000 40%,#000 68%,transparent 70%,transparent 74%,#000 76%);animation:spin 14s linear infinite;opacity:.9}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* loader */
+.scan{text-align:center}
+.loader{width:72px;height:72px;margin:0 auto 22px;position:relative}
+.loader::before,.loader::after{content:"";position:absolute;inset:0;border-radius:50%;border:3px solid transparent}
+.loader::before{border-top-color:var(--accent);border-right-color:var(--accent);animation:spin .9s cubic-bezier(.6,.2,.4,.8) infinite}
+.loader::after{inset:12px;border-bottom-color:#e6e6e6;border-left-color:#e6e6e6;animation:spin 1.3s linear infinite reverse;opacity:.7}
+.scan .big{font:600 30px var(--sans);letter-spacing:-.02em}
+.scan .small{font:12px var(--mono);color:var(--muted);margin-top:6px;max-width:520px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* right list */
+.rhead{padding:16px 16px 10px;border-bottom:1px solid var(--border)}
+.rhead .t{font-weight:600;font-size:16px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rhead .s{font:12px var(--mono);color:var(--text-2);margin-top:2px}
+.list{overflow:auto;padding:8px;flex:1}
+.row{display:grid;grid-template-columns:22px 1fr auto;gap:4px 10px;align-items:center;padding:8px 10px;border-radius:8px;cursor:pointer;position:relative}
+.row:hover,.row.hl{background:var(--recess)}
+.row .dot{width:10px;height:10px;border-radius:3px;justify-self:center}
+.row .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.row .sz{font:12px var(--mono);color:var(--text-2)}
+.row .pb{grid-column:2/4;height:3px;border-radius:9px;background:#16171a;overflow:hidden}
+.row .pb i{display:block;height:100%;border-radius:9px;opacity:.85}
+.row .acts{position:absolute;right:8px;top:6px;display:none;gap:4px;background:var(--recess);padding-left:8px}
+.row:hover .acts{display:flex}
+.row:hover .sz{visibility:hidden}
+.ib{width:26px;height:26px;border-radius:6px;border:0;display:grid;place-items:center;background:#1a1b1d;color:var(--text-2);cursor:pointer;box-shadow:var(--key)}
+.ib:hover{color:#fff;background:#232427}
+.ib.del:hover{color:var(--accent)}
+.ib svg{width:14px;height:14px}
+.row.ghost{cursor:default;color:var(--muted)}
+
+footer{grid-column:1/-1;border-top:1px solid var(--border);display:flex;align-items:center;gap:18px;padding:0 16px;font:11px var(--mono);color:var(--muted);background:rgba(4,5,6,.8)}
+footer .grow{flex:1}
+
+/* tooltip / menu / modal / toast */
+.tip{position:fixed;z-index:20;pointer-events:none;background:rgba(17,18,20,.92);backdrop-filter:blur(20px);border-radius:10px;padding:10px 12px;box-shadow:var(--key),0 12px 32px rgba(0,0,0,.5);max-width:360px;opacity:0;transition:opacity .1s}
+.tip.on{opacity:1}
+.tip .tn{font-weight:600;word-break:break-all}
+.tip .tp{font:11px var(--mono);color:var(--muted);word-break:break-all;margin-top:2px}
+.tip .tv{display:flex;gap:14px;margin-top:8px;font:12px var(--mono);color:var(--text-2)}
+.tip .tv b{color:#fff;font-weight:500}
+.menu{position:fixed;z-index:30;min-width:220px;background:#111214;border-radius:12px;padding:6px;box-shadow:var(--key),0 16px 40px rgba(0,0,0,.6);display:none}
+.menu.on{display:block}
+.mi{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px}
+.mi:hover{background:#1c1d20}
+.mi svg{width:15px;height:15px;color:var(--text-2)}
+.mi.red,.mi.red svg{color:var(--accent)}
+.mi.off{opacity:.35;pointer-events:none}
+.msep{height:1px;background:var(--border);margin:5px 4px}
+.veil{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);display:none;place-items:center}
+.veil.on{display:grid}
+.modal{width:min(440px,92vw);background:var(--card);border-radius:20px;padding:22px;box-shadow:var(--key),0 30px 80px rgba(0,0,0,.7);animation:pop .2s ease-out}
+@keyframes pop{from{opacity:0;transform:scale(.96)}}
+.modal h3{margin:0 0 6px;font-size:18px;letter-spacing:-.01em}
+.modal .p{color:var(--text-2);font-size:13px}
+.modal .path{font:12px var(--mono);background:var(--recess);border-radius:8px;padding:10px;margin:14px 0;word-break:break-all;color:#d0d0d0}
+.modal .row2{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.toast{position:fixed;bottom:44px;left:50%;transform:translateX(-50%) translateY(20px);z-index:50;background:#e6e6e6;color:#1b1c1e;font-weight:500;padding:10px 16px;border-radius:9999px;opacity:0;transition:.25s;pointer-events:none}
+.toast.on{opacity:1;transform:translateX(-50%)}
+.toast.err{background:var(--accent);color:#1a0505}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#1f2023;border-radius:9px;border:3px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#2c2d31;background-clip:padding-box;border:3px solid transparent}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-drive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M5.5 13 8 4h8l2.5 9"/><path d="M6 17h.01M10 17h.01"/></symbol>
+  <symbol id="i-usb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7V3h8v4"/><rect x="6" y="7" width="12" height="14" rx="2"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6L20 8"/><path d="M20 3v5h-5"/></symbol>
+  <symbol id="i-zoom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></symbol>
+</svg>
+
+<div class="app">
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="none" stroke="#ff6363" stroke-width="5" stroke-dasharray="48 28"/><circle cx="16" cy="16" r="12" fill="none" stroke="#e6e6e6" stroke-width="5" stroke-dasharray="20 56" stroke-dashoffset="-50"/><circle cx="16" cy="16" r="4" fill="#e6e6e6"/></svg>
+      DiskMap
+    </div>
+    <div class="crumbs" id="crumbs"></div>
+    <button class="btn" id="upBtn" title="Up (Backspace)" disabled><svg><use href="#i-up"/></svg>Up</button>
+    <button class="btn" id="rescanBtn" title="Rescan (F5)"><svg><use href="#i-refresh"/></svg>Rescan</button>
+  </header>
+
+  <aside>
+    <div class="label">Drives</div>
+    <div id="drives"></div>
+    <div class="label" style="margin-top:20px">Scan a folder</div>
+    <form class="field" id="pathForm">
+      <input class="input" id="pathInput" placeholder="C:\Users\..." spellcheck="false">
+      <button class="btn primary" type="submit">Scan</button>
+    </form>
+    <div class="stats" id="stats" style="display:none">
+      <div class="stat"><b id="stSize">—</b><span>used</span></div>
+      <div class="stat"><b id="stFiles">—</b><span>files</span></div>
+    </div>
+    <div class="hint">
+      Click a slice to open the folder.<br>
+      Click the center to go up.<br>
+      Right-click to show in Explorer or move to the Recycle Bin.
+    </div>
+  </aside>
+
+  <main id="main">
+    <div class="empty" id="empty">
+      <div class="orb"></div>
+      <h2>Where did my space go?</h2>
+      <p>Pick a drive on the left — DiskMap will scan it and show everything as a radial map.</p>
+    </div>
+    <div class="scan" id="scanView" style="display:none">
+      <div class="loader"></div>
+      <div class="big" id="scBytes">0 B</div>
+      <div class="small" id="scFiles">0 files</div>
+      <div class="small" id="scCur"></div>
+      <div style="margin-top:20px"><button class="btn" id="cancelBtn">Cancel</button></div>
+    </div>
+    <svg id="map" viewBox="-500 -500 1000 1000" style="display:none">
+      <g id="rings"></g>
+      <circle class="center-c" id="centerC" r="120"/>
+      <text class="chint" id="cHint" y="-46">up</text>
+      <text class="ctitle" id="cTitle" y="4"></text>
+      <text class="csize" id="cSize" y="42"></text>
+    </svg>
+  </main>
+
+  <section class="right">
+    <div class="rhead"><div class="t" id="rTitle">Contents</div><div class="s" id="rSub">—</div></div>
+    <div class="list" id="list"></div>
+  </section>
+
+  <footer>
+    <span id="fStatus">Ready</span><span id="fMode"></span><span class="grow"></span><span id="fErr"></span><span>DiskMap 1.1.0</span>
+  </footer>
+</div>
+
+<div class="tip" id="tip"></div>
+<div class="menu" id="menu"></div>
+<div class="veil" id="veil"><div class="modal">
+  <h3>Move to Recycle Bin?</h3>
+  <div class="p" id="mdSub"></div>
+  <div class="path" id="mdPath"></div>
+  <div class="p">You can restore it from the Windows Recycle Bin.</div>
+  <div class="row2"><button class="btn" id="mdNo">Cancel</button><button class="btn danger" id="mdYes"><svg><use href="#i-trash"/></svg>Move to Bin</button></div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const TOKEN = location.hash.slice(1);
+const $ = id => document.getElementById(id);
+const api = async (url, opts = {}) => {
+  const r = await fetch(url, {...opts, headers: {'X-Token': TOKEN}});
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+  return r.status === 204 ? null : r.json();
+};
+const fmt = b => {
+  const u = ['B','KB','MB','GB','TB']; let i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return (i === 0 ? b : b.toFixed(b < 10 ? 2 : b < 100 ? 1 : 0)).toString() + ' ' + u[i];
+};
+const num = n => n.toLocaleString('en-US');
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+let state = { root: null, cur: null, node: null, sep: '\\', drives: [] };
+
+/* ---------- background: dot grid reacting to the cursor ---------- */
+(() => {
+  const c = $('bg'), g = c.getContext('2d'); let W, H, mx = -999, my = -999, raf = 0, dpr = 1;
+  const S = 24;
+  const resize = () => { dpr = devicePixelRatio || 1; W = innerWidth; H = innerHeight; c.width = W*dpr; c.height = H*dpr; g.setTransform(dpr,0,0,dpr,0,0); draw(); };
+  const draw = () => {
+    raf = 0; g.clearRect(0,0,W,H);
+    for (let y = S/2; y < H; y += S) for (let x = S/2; x < W; x += S) {
+      const dx = x - mx, dy = y - my, d = Math.hypot(dx, dy), k = Math.max(0, 1 - d/180);
+      const px = x + (d ? dx/d : 0) * k * 6, py = y + (d ? dy/d : 0) * k * 6;
+      g.fillStyle = k > 0 ? `rgba(255,${99+156*(1-k)|0},${99+156*(1-k)|0},${0.07 + k*0.45})` : 'rgba(255,255,255,0.055)';
+      g.beginPath(); g.arc(px, py, 1 + k*0.9, 0, 6.283); g.fill();
+    }
+  };
+  addEventListener('resize', resize);
+  addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; if (!raf) raf = requestAnimationFrame(draw); });
+  addEventListener('mouseleave', () => { mx = my = -999; draw(); });
+  resize();
+})();
+
+/* ---------- drives ---------- */
+async function loadDrives() {
+  state.drives = await api('/api/drives');
+  $('drives').innerHTML = state.drives.map(d => {
+    const used = d.total - d.free, p = d.total ? used / d.total * 100 : 0;
+    const active = state.root && state.root.toLowerCase() === d.path.toLowerCase() ? ' active' : '';
+    return `<div class="drive${active}" data-path="${esc(d.path)}">
+      <div class="top"><div class="ico"><svg><use href="#i-${d.kind === 'usb' ? 'usb' : 'drive'}"/></svg></div>
+        <div style="min-width:0"><div class="name">${esc(d.label || 'Local Disk')} (${esc(d.path.replace(/\\$/, ''))})</div>
+        <div class="sub">${fmt(d.free)} free of ${fmt(d.total)}</div></div></div>
+      <div class="bar"><i class="${p > 88 ? 'hot' : ''}" style="width:${p.toFixed(1)}%"></i></div></div>`;
+  }).join('') || '<div class="hint">No drives found</div>';
+  document.querySelectorAll('.drive').forEach(el => el.onclick = () => startScan(el.dataset.path));
+}
+
+/* ---------- scanning ---------- */
+let pollT = 0;
+async function startScan(path) {
+  try { await api('/api/scan?path=' + encodeURIComponent(path)); }
+  catch (e) { return toast(e.message, true); }
+  state.root = null;
+  showView('scan'); clearTimeout(pollT); poll();
+}
+async function poll() {
+  const p = await api('/api/progress').catch(() => null);
+  if (!p) { pollT = setTimeout(poll, 500); return; }
+  $('scBytes').textContent = fmt(p.bytes);
+  $('scFiles').textContent = num(p.files) + ' files' + (p.errors ? ` · ${num(p.errors)} inaccessible` : '');
+  $('scCur').textContent = p.current;
+  $('fStatus').textContent = p.scanning ? 'Scanning ' + p.root : 'Ready';
+  if (p.scanning || !p.ready) { pollT = setTimeout(poll, 200); return; }
+  state.root = p.root; state.sep = p.root.includes('\\') ? '\\' : '/';
+  $('fMode').textContent = `Mode: ${p.mode} · ${(p.took/1000).toFixed(1)} s`;
+  $('fMode').title = p.fastErr || '';
+  $('fErr').textContent = p.errors ? `${num(p.errors)} items were inaccessible — run as administrator for a full scan` : '';
+  loadDrives();
+  navigate(p.root);
+}
+$('cancelBtn').onclick = () => api('/api/cancel').catch(() => {}); // shows what was scanned so far
+
+function showView(v) {
+  $('empty').style.display = v === 'empty' ? '' : 'none';
+  $('scanView').style.display = v === 'scan' ? '' : 'none';
+  $('map').style.display = v === 'map' ? '' : 'none';
+}
+
+/* ---------- navigation ---------- */
+async function navigate(path, anim = true) {
+  let data;
+  try { data = await api('/api/tree?depth=5&path=' + encodeURIComponent(path)); }
+  catch (e) { return toast('Could not open: ' + e.message, true); }
+  state.cur = path; state.node = data.node;
+  showView('map'); draw(anim); renderList(); renderCrumbs();
+  $('stats').style.display = '';
+  $('stSize').textContent = fmt(data.node.size);
+  $('stFiles').textContent = num(data.node.files);
+  $('pathInput').value = path;
+}
+const isRoot = () => state.cur && state.root && state.cur.toLowerCase() === state.root.toLowerCase();
+function parentPath(p) {
+  if (isRoot()) return null;
+  const s = state.sep, t = p.endsWith(s) ? p.slice(0, -1) : p, i = t.lastIndexOf(s);
+  let q = t.slice(0, i); if (q.length < state.root.length) q = state.root;
+  if (/^[A-Za-z]:$/.test(q)) q += s;
+  if (q === '') q = '/';
+  return q;
+}
+function goUp() { const p = parentPath(state.cur); if (p) navigate(p); }
+$('upBtn').onclick = goUp;
+$('rescanBtn').onclick = () => { if (state.root) startScan(state.root); };
+
+function renderCrumbs() {
+  const s = state.sep, root = state.root, cur = state.cur;
+  const rest = cur.slice(root.length).split(s).filter(Boolean);
+  const items = [{name: root.replace(/[\\/]$/, '') || '/', path: root}];
+  let acc = root;
+  for (const part of rest) { acc = acc.endsWith(s) ? acc + part : acc + s + part; items.push({name: part, path: acc}); }
+  $('crumbs').innerHTML = items.map((it, i) =>
+    (i ? '<span class="sep">›</span>' : '') +
+    `<span class="crumb${i === items.length - 1 ? ' cur' : ''}" data-p="${esc(it.path)}">${esc(it.name)}</span>`).join('');
+  $('crumbs').querySelectorAll('.crumb').forEach(el => el.onclick = () => navigate(el.dataset.p));
+  $('upBtn').disabled = isRoot();
+}
+
+/* ---------- sunburst ---------- */
+const R0 = 120, R1 = 490, TAU = Math.PI * 2;
+let segs = [];
+function color(a, depth, kind) {
+  if (kind === 'small' || kind === 'other') return `hsl(220 6% ${Math.max(14, 26 - depth*2)}%)`;
+  const h = (a / TAU * 360 + 350) % 360;
+  const sat = kind === 'file' ? 38 : 72;
+  return `hsl(${h.toFixed(1)} ${sat}% ${Math.max(30, 64 - depth*7)}%)`;
+}
+function arc(r0, r1, a0, a1) {
+  if (a1 - a0 >= TAU - 1e-4) {
+    return `M${r1},0A${r1},${r1} 0 1 1 ${-r1},0A${r1},${r1} 0 1 1 ${r1},0Z M${r0},0A${r0},${r0} 0 1 0 ${-r0},0A${r0},${r0} 0 1 0 ${r0},0Z`;
+  }
+  const s0 = a0 - Math.PI/2, s1 = a1 - Math.PI/2, L = a1 - a0 > Math.PI ? 1 : 0;
+  const p = (r, a) => `${(r*Math.cos(a)).toFixed(2)},${(r*Math.sin(a)).toFixed(2)}`;
+  return `M${p(r1,s0)}A${r1},${r1} 0 ${L} 1 ${p(r1,s1)}L${p(r0,s1)}A${r0},${r0} 0 ${L} 0 ${p(r0,s0)}Z`;
+}
+function maxDepth(n, d = 0) { return n.children ? Math.max(d, ...n.children.map(c => maxDepth(c, d + 1))) : d; }
+function draw(anim) {
+  const n = state.node, levels = Math.max(1, Math.min(5, maxDepth(n)));
+  const w = (R1 - R0) / levels; segs = [];
+  const walk = (node, a0, a1, depth, rootHue) => {
+    if (!node.children || !node.size) return;
+    let a = a0;
+    for (const c of node.children) {
+      const span = (a1 - a0) * c.size / node.size;
+      if (span > 0.003) {
+        const hueA = depth === 0 ? a + span/2 : rootHue;
+        segs.push({n: c, a0: a, a1: a + span, depth, hue: depth === 0 ? hueA : rootHue + (a + span/2 - rootHue) * 0.35});
+        if (depth + 1 < levels) walk(c, a, a + span, depth + 1, hueA);
+      }
+      a += span;
+    }
+  };
+  walk(n, 0, TAU, 0, 0);
+  $('rings').innerHTML = segs.map((s, i) => {
+    const r0 = R0 + 4 + s.depth * w, r1 = r0 + w - 3;
+    return `<path class="seg" data-i="${i}" d="${arc(r0, r1, s.a0, s.a1)}" fill="${color(s.hue, s.depth, s.n.kind)}"/>`;
+  }).join('');
+  if (anim) { const g = $('rings'); g.classList.remove('enter'); void g.offsetWidth; g.classList.add('enter'); }
+  const name = n.name.length > 18 ? n.name.slice(0, 17) + '…' : n.name;
+  $('cTitle').textContent = name; $('cSize').textContent = fmt(n.size);
+  $('cHint').style.display = isRoot() ? 'none' : '';
+}
+const segOf = e => { const el = e.target.closest('.seg'); return el ? segs[+el.dataset.i] : null; };
+$('rings').addEventListener('mousemove', e => { const s = segOf(e); s ? showTip(s.n, e) : hideTip(); highlightRow(s && s.depth === 0 ? s.n : null); });
+$('rings').addEventListener('mouseleave', () => { hideTip(); highlightRow(null); });
+$('rings').addEventListener('click', e => { const s = segOf(e); if (s && s.n.kind === 'dir') navigate(s.n.path); });
+$('rings').addEventListener('contextmenu', e => { e.preventDefault(); const s = segOf(e); if (s) openMenu(s.n, e); });
+$('centerC').onclick = goUp;
+
+/* ---------- tooltip ---------- */
+function showTip(n, e) {
+  const pct = state.node.size ? (n.size / state.node.size * 100) : 0;
+  $('tip').innerHTML = `<div class="tn">${esc(n.name)}</div>${n.path ? `<div class="tp">${esc(n.path)}</div>` : ''}
+    <div class="tv"><span><b>${fmt(n.size)}</b></span><span>${pct.toFixed(1)}%</span>${n.kind !== 'file' ? `<span>${num(n.files)} files</span>` : ''}</div>`;
+  const t = $('tip'); t.classList.add('on');
+  const x = Math.min(e.clientX + 16, innerWidth - t.offsetWidth - 10), y = Math.min(e.clientY + 16, innerHeight - t.offsetHeight - 10);
+  t.style.left = x + 'px'; t.style.top = y + 'px';
+}
+const hideTip = () => $('tip').classList.remove('on');
+
+/* ---------- list ---------- */
+function renderList() {
+  const n = state.node, kids = n.children || [];
+  $('rTitle').textContent = n.name; $('rSub').textContent = `${fmt(n.size)} · ${num(kids.length)} items`;
+  const segColor = new Map(segs.filter(s => s.depth === 0).map(s => [s.n, color(s.hue, 0, s.n.kind)]));
+  $('list').innerHTML = kids.map((c, i) => {
+    const pct = n.size ? c.size / n.size * 100 : 0, col = segColor.get(c) || '#3a3b3e';
+    const ghost = c.kind === 'small' || c.kind === 'other';
+    return `<div class="row${ghost ? ' ghost' : ''}" data-i="${i}">
+      <span class="dot" style="background:${col}"></span>
+      <span class="n">${esc(c.name)}</span><span class="sz">${fmt(c.size)}</span>
+      <span class="pb"><i style="width:${Math.max(.5, pct).toFixed(2)}%;background:${col}"></i></span>
+      ${ghost ? '' : `<span class="acts"><button class="ib" data-a="open" title="Show in Explorer"><svg><use href="#i-open"/></svg></button><button class="ib del" data-a="del" title="Move to Recycle Bin"><svg><use href="#i-trash"/></svg></button></span>`}
+    </div>`;
+  }).join('') || '<div class="hint">Empty</div>';
+}
+$('list').addEventListener('click', e => {
+  const row = e.target.closest('.row'); if (!row) return;
+  const c = state.node.children[+row.dataset.i], a = e.target.closest('[data-a]');
+  if (a) { e.stopPropagation(); return a.dataset.a === 'open' ? reveal(c) : askDelete(c); }
+  if (c.kind === 'dir') navigate(c.path);
+});
+$('list').addEventListener('contextmenu', e => {
+  const row = e.target.closest('.row'); if (!row) return; e.preventDefault();
+  openMenu(state.node.children[+row.dataset.i], e);
+});
+$('list').addEventListener('mouseover', e => {
+  const row = e.target.closest('.row'); const c = row ? state.node.children[+row.dataset.i] : null;
+  document.querySelectorAll('#rings .seg').forEach(p => { const s = segs[+p.dataset.i]; p.classList.toggle('dim', !!c && !isInside(s, c)); });
+});
+$('list').addEventListener('mouseleave', () => document.querySelectorAll('#rings .seg.dim').forEach(p => p.classList.remove('dim')));
+function isInside(s, c) {
+  const top = segs.find(x => x.depth === 0 && x.n === c); if (!top) return false;
+  return s.a0 >= top.a0 - 1e-9 && s.a1 <= top.a1 + 1e-9;
+}
+function highlightRow(c) {
+  const kids = state.node ? state.node.children || [] : [];
+  document.querySelectorAll('#list .row').forEach(r => r.classList.toggle('hl', kids[+r.dataset.i] === c));
+}
+
+/* ---------- context menu ---------- */
+function openMenu(n, e) {
+  const ghost = n.kind === 'small' || n.kind === 'other', m = $('menu');
+  m.innerHTML = `
+    <div class="mi${n.kind === 'dir' ? '' : ' off'}" data-a="go"><svg><use href="#i-zoom"/></svg>Open here</div>
+    <div class="mi${ghost ? ' off' : ''}" data-a="open"><svg><use href="#i-open"/></svg>Show in Explorer</div>
+    <div class="msep"></div>
+    <div class="mi red${ghost ? ' off' : ''}" data-a="del"><svg><use href="#i-trash"/></svg>Move to Recycle Bin · ${fmt(n.size)}</div>`;
+  m.classList.add('on');
+  m.style.left = Math.min(e.clientX, innerWidth - m.offsetWidth - 8) + 'px';
+  m.style.top = Math.min(e.clientY, innerHeight - m.offsetHeight - 8) + 'px';
+  m.onclick = ev => { const a = ev.target.closest('[data-a]'); if (!a) return; closeMenu();
+    if (a.dataset.a === 'go') navigate(n.path); else if (a.dataset.a === 'open') reveal(n); else askDelete(n); };
+  hideTip();
+}
+const closeMenu = () => $('menu').classList.remove('on');
+addEventListener('mousedown', e => { if (!e.target.closest('#menu')) closeMenu(); });
+
+/* ---------- actions ---------- */
+async function reveal(n) { try { await api('/api/open?path=' + encodeURIComponent(n.path)); } catch (e) { toast(e.message, true); } }
+let pending = null;
+function askDelete(n) {
+  pending = n;
+  $('mdSub').textContent = `${n.kind === 'dir' ? 'Folder' : 'File'} · ${fmt(n.size)}${n.kind === 'dir' ? ' · ' + num(n.files) + ' files' : ''}`;
+  $('mdPath').textContent = n.path; $('veil').classList.add('on');
+  setTimeout(() => $('mdNo').focus(), 50);
+}
+const closeModal = () => { $('veil').classList.remove('on'); pending = null; };
+$('mdNo').onclick = closeModal;
+$('veil').onclick = e => { if (e.target === $('veil')) closeModal(); };
+$('mdYes').onclick = async () => {
+  const n = pending; if (!n) return;
+  $('mdYes').disabled = true;
+  try {
+    const r = await api('/api/delete?path=' + encodeURIComponent(n.path), {method: 'POST'});
+    closeModal(); toast('Freed ' + fmt(r.freed)); navigate(state.cur, false); loadDrives();
+  } catch (e) { toast(e.message, true); }
+  $('mdYes').disabled = false;
+};
+
+let toastT;
+function toast(msg, err) { const t = $('toast'); t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 3200); }
+
+$('pathForm').onsubmit = e => { e.preventDefault(); const p = $('pathInput').value.trim(); if (p) startScan(p); };
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'Escape') { closeMenu(); closeModal(); }
+  if ((e.key === 'Backspace' || (e.altKey && e.key === 'ArrowLeft')) && state.cur) { e.preventDefault(); goUp(); }
+  if (e.key === 'F5') { e.preventDefault(); if (state.root) startScan(state.root); }
+  if (e.key === 'Delete' && pending === null) {}
+});
+addEventListener('contextmenu', e => { if (!e.target.closest('#rings,#list')) e.preventDefault(); });
+
+/* keep-alive so the app quits after the window is closed */
+const ping = () => api('/api/ping').catch(() => {});
+ping(); setInterval(ping, 20000);
+
+loadDrives().catch(e => toast(e.message, true));
+api('/api/progress').then(p => { if (p.scanning || p.ready) { showView('scan'); poll(); } });
+</script>
+</body>
+</html>
